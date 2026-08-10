@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brand A - Patient Monitor Simulator</title>
+  <style>
+    /* ==========================================================================
+       STYLE DEFINITIONS - BRAND A (Philips / GE Style Medical Monitor)
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: 'Consolas', 'Courier New', 'Lucida Console', monospace;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Monitor Header Bar */
+    .header-bar {
+      height: 48px;
+      background: #111116;
+      border-bottom: 2px solid #22222d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      font-size: 14px;
+      color: #a0a0a0;
+    }
+
+    .brand-title {
+      font-weight: bold;
+      color: #e0e0e0;
+      letter-spacing: 1.5px;
+    }
+
+    .patient-info span {
+      margin-right: 20px;
+    }
+
+    .patient-info strong {
+      color: #ffffff;
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 4px;
+      background: #163316;
+      color: #00ff66;
+      font-weight: bold;
+      font-size: 12px;
+      letter-spacing: 1px;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .status-badge.alert {
+      background: #551111;
+      color: #ff3333;
+      animation: flash-badge 0.8s infinite alternate;
+    }
+
+    @keyframes flash-badge {
+      from { opacity: 1; }
+      to { opacity: 0.4; }
+    }
+
+    /* 2x2 Main Grid Layout for Readouts */
+    .monitor-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    /* Parameter Card Panels */
+    .readout-card {
+      background: #08080c;
+      border: 2px solid #1a1a26;
+      border-radius: 6px;
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .readout-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      z-index: 2;
+    }
+
+    .param-label {
+      font-size: 26px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    .param-unit {
+      font-size: 16px;
+      font-weight: normal;
+      margin-left: 6px;
+      opacity: 0.85;
+    }
+
+    .param-limits {
+      font-size: 13px;
+      opacity: 0.55;
+      text-align: right;
+      line-height: 1.3;
+    }
+
+    .value-container {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      flex: 1;
+      margin-top: 10px;
+      z-index: 2;
+    }
+
+    .main-value {
+      font-size: 110px;
+      font-weight: bold;
+      line-height: 1;
+      letter-spacing: -2px;
+      transition: color 0.3s;
+    }
+
+    .sub-value {
+      font-size: 42px;
+      font-weight: bold;
+      margin-left: 12px;
+      opacity: 0.85;
+    }
+
+    /* Canvas Background for Animated Waveforms */
+    .waveform-canvas {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      width: calc(55% - 20px);
+      height: 70px;
+      opacity: 0.75;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* --------------------------------------------------------------------------
+       PARAMETER COLOR SCHEMES
+       -------------------------------------------------------------------------- */
+    /* 1. Heart Rate (HR) - Green */
+    .card-hr {
+      border-color: #003a14;
+    }
+    .card-hr .param-label, .card-hr .main-value, .card-hr .param-unit {
+      color: #00ff44;
+      text-shadow: 0 0 14px rgba(0, 255, 68, 0.35);
+    }
+
+    /* 2. SpO2 - Cyan / Light Blue */
+    .card-spo2 {
+      border-color: #003a4d;
+    }
+    .card-spo2 .param-label, .card-spo2 .main-value, .card-spo2 .param-unit {
+      color: #00e5ff;
+      text-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+    }
+
+    /* 3. NIBP (Blood Pressure) - Red Label & White Numerics */
+    .card-nibp {
+      border-color: #4a1515;
+    }
+    .card-nibp .param-label, .card-nibp .param-unit {
+      color: #ff3344;
+    }
+    .card-nibp .main-value {
+      color: #ffffff;
+      font-size: 86px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
+    }
+    .card-nibp .sub-value {
+      color: #ff8888;
+    }
+
+    /* 4. EtCO2 - Yellow */
+    .card-etco2 {
+      border-color: #4d3e00;
+    }
+    .card-etco2 .param-label, .card-etco2 .main-value, .card-etco2 .param-unit {
+      color: #ffea00;
+      text-shadow: 0 0 14px rgba(255, 234, 0, 0.35);
+    }
+
+    /* Alarm State Flashing Animation for Abnormal Cycles */
+    .alarm-active {
+      animation: border-alarm 1s infinite alternate;
+    }
+    @keyframes border-alarm {
+      from { border-color: #ff0000; box-shadow: inset 0 0 25px rgba(255, 0, 0, 0.45); }
+      to { border-color: #550000; box-shadow: inset 0 0 5px rgba(255, 0, 0, 0.15); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header / Status Bar -->
+  <header class="header-bar">
+    <div class="brand-title">BRAND-A // ANESTHESIA MONITOR</div>
+    <div class="patient-info">
+      <span>PATIENT: <strong>DOE, J. (ADULT)</strong></span>
+      <span>BED: <strong>04</strong></span>
+      <span id="clock-display">00:00:00</span>
+    </div>
+    <div id="status-badge" class="status-badge">MONITORING</div>
+  </header>
+
+  <!-- 2x2 Monitor Grid -->
+  <main class="monitor-grid">
+
+    <!-- 1. Heart Rate (HR) -->
+    <section class="readout-card card-hr" id="card-hr">
+      <div class="readout-header">
+        <div>
+          <span class="param-label">HR</span>
+          <span class="param-unit">bpm</span>
+        </div>
+        <div class="param-limits">
+          HIGH 120<br>LOW 50
+        </div>
+      </div>
+      <canvas id="canvas-hr" class="waveform-canvas"></canvas>
+      <div class="value-container">
+        <span id="val-hr" class="main-value">72</span>
+      </div>
+    </section>
+
+    <!-- 2. SpO2 (Oxygen Saturation) -->
+    <section class="readout-card card-spo2" id="card-spo2">
+      <div class="readout-header">
+        <div>
+          <span class="param-label">SpO2</span>
+          <span class="param-unit">%</span>
+        </div>
+        <div class="param-limits">
+          HIGH 100<br>LOW 90
+        </div>
+      </div>
+      <canvas id="canvas-spo2" class="waveform-canvas"></canvas>
+      <div class="value-container">
+        <span id="val-spo2" class="main-value">98</span>
+      </div>
+    </section>
+
+    <!-- 3. Blood Pressure (NIBP) -->
+    <section class="readout-card card-nibp" id="card-nibp">
+      <div class="readout-header">
+        <div>
+          <span class="param-label">NIBP</span>
+          <span class="param-unit">mmHg</span>
+        </div>
+        <div class="param-limits">
+          SYS 160 / 90<br>DIA 100 / 50
+        </div>
+      </div>
+      <div class="value-container">
+        <span id="val-nibp" class="main-value">120/80</span>
+        <span id="val-map" class="sub-value">(93)</span>
+      </div>
+    </section>
+
+    <!-- 4. EtCO2 -->
+    <section class="readout-card card-etco2" id="card-etco2">
+      <div class="readout-header">
+        <div>
+          <span class="param-label">EtCO2</span>
+          <span class="param-unit">mmHg</span>
+        </div>
+        <div class="param-limits">
+          HIGH 50<br>LOW 30
+        </div>
+      </div>
+      <canvas id="canvas-etco2" class="waveform-canvas"></canvas>
+      <div class="value-container">
+        <span id="val-etco2" class="main-value">38</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Simulation Control Script -->
+  <script>
+    /* ==========================================================================
+       SIMULATION CONFIGURATION & RANGES
+       Adjust these parameters to customize realistic monitor behaviour.
+       ========================================================================== */
+    const CONFIG = {
+      // Normal physiological ranges for simulation
+      hr: { min: 65, max: 85 },        // Heart Rate (bpm)
+      spo2: { min: 96, max: 99 },      // Oxygen Saturation (%)
+      sys: { min: 110, max: 130 },     // Systolic Blood Pressure (mmHg)
+      dia: { min: 70, max: 85 },       // Diastolic Blood Pressure (mmHg)
+      etco2: { min: 35, max: 42 },     // End-Tidal CO2 (mmHg)
+
+      // Timing & anomaly settings
+      updateIntervalMs: 3000,          // Refresh rate: every 3 seconds
+      anomalyIntervalCycles: 10,      // Every ~10 cycles (approx 30 seconds), trigger anomaly
+      abnormalSpo2Value: 88,          // Brief abnormal SpO2 dip reading
+    };
+
+    // Tracking current simulation cycle
+    let cycleCount = 0;
+
+    // DOM Reference Handles
+    const elHr = document.getElementById('val-hr');
+    const elSpo2 = document.getElementById('val-spo2');
+    const elNibp = document.getElementById('val-nibp');
+    const elMap = document.getElementById('val-map');
+    const elEtco2 = document.getElementById('val-etco2');
+    const elCardSpo2 = document.getElementById('card-spo2');
+    const elStatusBadge = document.getElementById('status-badge');
+    const elClock = document.getElementById('clock-display');
+
+    /**
+     * Helper: Generate a random integer in inclusive range [min, max]
+     */
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    /**
+     * Main Simulation Loop - Called every 3 seconds
+     */
+    function updateMonitorReadings() {
+      cycleCount++;
+
+      // Trigger an anomaly reading every N cycles (~30s)
+      const isAnomalyCycle = (cycleCount % CONFIG.anomalyIntervalCycles === 0);
+
+      // 1. HR (Heart Rate) - Green
+      const currentHr = getRandomInt(CONFIG.hr.min, CONFIG.hr.max);
+      elHr.textContent = currentHr;
+
+      // 2. SpO2 (Oxygen Saturation) - Cyan
+      let currentSpo2;
+      if (isAnomalyCycle) {
+        // Inject abnormal reading (dip to 88%)
+        currentSpo2 = CONFIG.abnormalSpo2Value;
+        elCardSpo2.classList.add('alarm-active');
+        elStatusBadge.textContent = 'ALARM: SPO2 LOW';
+        elStatusBadge.classList.add('alert');
+      } else {
+        currentSpo2 = getRandomInt(CONFIG.spo2.min, CONFIG.spo2.max);
+        elCardSpo2.classList.remove('alarm-active');
+        elStatusBadge.textContent = 'MONITORING';
+        elStatusBadge.classList.remove('alert');
+      }
+      elSpo2.textContent = currentSpo2;
+
+      // 3. NIBP (Blood Pressure) - Red/White
+      const currentSys = getRandomInt(CONFIG.sys.min, CONFIG.sys.max);
+      const currentDia = getRandomInt(CONFIG.dia.min, CONFIG.dia.max);
+      const currentMap = Math.round(currentDia + (currentSys - currentDia) / 3);
+
+      elNibp.textContent = `${currentSys}/${currentDia}`;
+      elMap.textContent = `(${currentMap})`;
+
+      // 4. EtCO2 - Yellow
+      const currentEtco2 = getRandomInt(CONFIG.etco2.min, CONFIG.etco2.max);
+      elEtco2.textContent = currentEtco2;
+    }
+
+    /**
+     * Real-time Clock Handler
+     */
+    function updateClock() {
+      const now = new Date();
+      elClock.textContent = now.toTimeString().split(' ')[0];
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    /**
+     * Canvas Real-time Waveform Rendering (Aesthetic Visual Enhancement)
+     */
+    function initWaveforms() {
+      const setupWaveformCanvas = (id, color, waveFn) => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let phase = 0;
+
+        setInterval(() => {
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+          const w = canvas.width;
+          const h = canvas.height;
+          
+          ctx.clearRect(0, 0, w, h);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+
+          phase += 0.08;
+          for (let x = 0; x < w; x++) {
+            const t = (x * 0.04) + phase;
+            const y = waveFn(t, h);
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }, 40);
+      };
+
+      // ECG Waveform (HR)
+      setupWaveformCanvas('canvas-hr', '#00ff44', (t, h) => {
+        const mod = t % (Math.PI * 2);
+        if (mod > 2.0 && mod < 2.25) return h * 0.2;  // R Peak
+        if (mod >= 2.25 && mod < 2.45) return h * 0.8; // S Dip
+        return h * 0.55 + Math.sin(t * 0.8) * 3;
+      });
+
+      // Pleth Waveform (SpO2)
+      setupWaveformCanvas('canvas-spo2', '#00e5ff', (t, h) => {
+        return h * 0.5 + Math.sin(t) * (h * 0.25) + Math.sin(t * 2) * (h * 0.08);
+      });
+
+      // Capnogram Waveform (EtCO2)
+      setupWaveformCanvas('canvas-etco2', '#ffea00', (t, h) => {
+        const mod = t % 6;
+        if (mod > 1.2 && mod < 4.2) return h * 0.3; // Expiratory plateau
+        return h * 0.8; // Baseline
+      });
+    }
+
+    // Initialize visual waveforms
+    initWaveforms();
+
+    // Start simulation immediately on page load
+    updateMonitorReadings();
+    setInterval(updateMonitorReadings, CONFIG.updateIntervalMs);
+  </script>
+</body>
+</html>

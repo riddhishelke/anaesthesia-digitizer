@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediTrack 3000 - Patient Monitor Simulator</title>
+  <style>
+    /* ==========================================================================
+       STYLE DEFINITIONS - BRAND B (MediTrack 3000 Light Clinical Monitor)
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: #f1f5f9;
+      color: #1e293b;
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Monitor Header Bar */
+    .header-bar {
+      height: 54px;
+      background: #ffffff;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      font-size: 14px;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      background: #0284c7;
+      color: #ffffff;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 17px;
+      color: #0f172a;
+    }
+
+    .patient-id-field {
+      display: flex;
+      gap: 24px;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .patient-id-field strong {
+      color: #334155;
+    }
+
+    .status-pill {
+      padding: 5px 14px;
+      border-radius: 20px;
+      background: #dcfce7;
+      color: #15803d;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      transition: all 0.3s ease;
+    }
+
+    .status-pill.alert {
+      background: #fee2e2;
+      color: #b91c1c;
+      animation: alert-pulse 0.8s infinite alternate;
+    }
+
+    @keyframes alert-pulse {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0.7; transform: scale(0.97); }
+    }
+
+    /* Horizontal Row Layout for Vitals Cards */
+    .vitals-row {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      padding: 20px;
+      align-items: stretch;
+    }
+
+    /* Parameter Card Panels */
+    .vital-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
+    }
+
+    /* Left Accent Stripe on Each Card */
+    .vital-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      border-radius: 12px 0 0 12px;
+    }
+
+    .vital-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .vital-label {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .vital-unit {
+      font-size: 14px;
+      font-weight: 500;
+      color: #64748b;
+      margin-left: 4px;
+    }
+
+    .vital-limits {
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: right;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    .vital-body {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      flex: 1;
+      z-index: 2;
+    }
+
+    .main-value {
+      font-size: 76px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -1.5px;
+    }
+
+    .sub-value {
+      font-size: 28px;
+      font-weight: 700;
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+
+    /* Waveform Canvas Behind Numeric Text */
+    .waveform-canvas {
+      width: 100%;
+      height: 65px;
+      margin-top: 12px;
+      opacity: 0.85;
+      pointer-events: none;
+    }
+
+    /* --------------------------------------------------------------------------
+       PARAMETER SPECIFIC BRAND B COLOR SCHEMES
+       -------------------------------------------------------------------------- */
+    /* 1. Heart Rate (HR) - Dark Blue */
+    .card-hr::before { background: #1d4ed8; }
+    .card-hr .vital-label, .card-hr .main-value {
+      color: #1e40af;
+    }
+
+    /* 2. SpO2 - Teal */
+    .card-spo2::before { background: #0d9488; }
+    .card-spo2 .vital-label, .card-spo2 .main-value {
+      color: #0f766e;
+    }
+
+    /* 3. Blood Pressure (NIBP) - Dark Red */
+    .card-nibp::before { background: #b91c1c; }
+    .card-nibp .vital-label, .card-nibp .main-value {
+      color: #991b1b;
+    }
+    .card-nibp .main-value {
+      font-size: 54px;
+    }
+    .card-nibp .sub-value {
+      color: #dc2626;
+    }
+
+    /* 4. EtCO2 - Orange */
+    .card-etco2::before { background: #ea580c; }
+    .card-etco2 .vital-label, .card-etco2 .main-value {
+      color: #c2410c;
+    }
+
+    /* Alarm State for Abnormal Cycles */
+    .alarm-active {
+      border-color: #fca5a5 !important;
+      box-shadow: 0 0 20px rgba(220, 38, 38, 0.18) !important;
+      background: #fff5f5 !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Bar -->
+  <header class="header-bar">
+    <div class="brand-section">
+      <span class="brand-logo">MT</span>
+      <span class="brand-name">MediTrack 3000</span>
+    </div>
+    <div class="patient-id-field">
+      <span>PATIENT ID: <strong>MT-88201</strong></span>
+      <span>NAME: <strong>DOE, JOHN</strong></span>
+      <span>DEPT: <strong>SURGERY OR-2</strong></span>
+      <span id="clock-display">00:00:00</span>
+    </div>
+    <div id="status-pill" class="status-pill">SYSTEM NORMAL</div>
+  </header>
+
+  <!-- Horizontal Row Layout -->
+  <main class="vitals-row">
+
+    <!-- 1. HR (Dark Blue) -->
+    <section class="vital-card card-hr" id="card-hr">
+      <div class="vital-header">
+        <div>
+          <span class="vital-label">HR</span>
+          <span class="vital-unit">bpm</span>
+        </div>
+        <div class="vital-limits">
+          LIMITS<br>50 - 120
+        </div>
+      </div>
+      <div class="vital-body">
+        <span id="val-hr" class="main-value">72</span>
+      </div>
+      <canvas id="canvas-hr" class="waveform-canvas"></canvas>
+    </section>
+
+    <!-- 2. SpO2 (Teal) -->
+    <section class="vital-card card-spo2" id="card-spo2">
+      <div class="vital-header">
+        <div>
+          <span class="vital-label">SpO2</span>
+          <span class="vital-unit">%</span>
+        </div>
+        <div class="vital-limits">
+          LIMITS<br>90 - 100
+        </div>
+      </div>
+      <div class="vital-body">
+        <span id="val-spo2" class="main-value">98</span>
+      </div>
+      <canvas id="canvas-spo2" class="waveform-canvas"></canvas>
+    </section>
+
+    <!-- 3. NIBP (Dark Red) -->
+    <section class="vital-card card-nibp" id="card-nibp">
+      <div class="vital-header">
+        <div>
+          <span class="vital-label">NIBP</span>
+          <span class="vital-unit">mmHg</span>
+        </div>
+        <div class="vital-limits">
+          SYS 90-160<br>DIA 50-100
+        </div>
+      </div>
+      <div class="vital-body">
+        <span id="val-nibp" class="main-value">120/80</span>
+        <span id="val-map" class="sub-value">(93)</span>
+      </div>
+      <div style="height: 65px; margin-top: 12px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #94a3b8; font-weight: 600;">
+        AUTO INTERVAL: 15 MIN
+      </div>
+    </section>
+
+    <!-- 4. EtCO2 (Orange) -->
+    <section class="vital-card card-etco2" id="card-etco2">
+      <div class="vital-header">
+        <div>
+          <span class="vital-label">EtCO2</span>
+          <span class="vital-unit">mmHg</span>
+        </div>
+        <div class="vital-limits">
+          LIMITS<br>30 - 50
+        </div>
+      </div>
+      <div class="vital-body">
+        <span id="val-etco2" class="main-value">38</span>
+      </div>
+      <canvas id="canvas-etco2" class="waveform-canvas"></canvas>
+    </section>
+
+  </main>
+
+  <!-- Simulation Control Script -->
+  <script>
+    /* ==========================================================================
+       SIMULATION CONFIGURATION & RANGES (Exact match with Brand A logic)
+       ========================================================================== */
+    const CONFIG = {
+      // Physiological ranges for simulation
+      hr: { min: 65, max: 85 },        // Heart Rate (bpm)
+      spo2: { min: 96, max: 99 },      // Oxygen Saturation (%)
+      sys: { min: 110, max: 130 },     // Systolic Blood Pressure (mmHg)
+      dia: { min: 70, max: 85 },       // Diastolic Blood Pressure (mmHg)
+      etco2: { min: 35, max: 42 },     // End-Tidal CO2 (mmHg)
+
+      // Timing & anomaly settings
+      updateIntervalMs: 3000,          // Refresh rate: 3 seconds
+      anomalyIntervalCycles: 10,      // Trigger abnormal reading every 10 cycles (~30s)
+      abnormalSpo2Value: 88,          // Brief abnormal SpO2 dip
+    };
+
+    let cycleCount = 0;
+
+    // DOM Reference Handles
+    const elHr = document.getElementById('val-hr');
+    const elSpo2 = document.getElementById('val-spo2');
+    const elNibp = document.getElementById('val-nibp');
+    const elMap = document.getElementById('val-map');
+    const elEtco2 = document.getElementById('val-etco2');
+    const elCardSpo2 = document.getElementById('card-spo2');
+    const elStatusPill = document.getElementById('status-pill');
+    const elClock = document.getElementById('clock-display');
+
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    /**
+     * Main Simulation Update Loop
+     */
+    function updateMonitorReadings() {
+      cycleCount++;
+
+      const isAnomalyCycle = (cycleCount % CONFIG.anomalyIntervalCycles === 0);
+
+      // 1. HR (Heart Rate) - Dark Blue
+      const currentHr = getRandomInt(CONFIG.hr.min, CONFIG.hr.max);
+      elHr.textContent = currentHr;
+
+      // 2. SpO2 (Teal)
+      let currentSpo2;
+      if (isAnomalyCycle) {
+        currentSpo2 = CONFIG.abnormalSpo2Value;
+        elCardSpo2.classList.add('alarm-active');
+        elStatusPill.textContent = 'ALERT: LOW SPO2';
+        elStatusPill.classList.add('alert');
+      } else {
+        currentSpo2 = getRandomInt(CONFIG.spo2.min, CONFIG.spo2.max);
+        elCardSpo2.classList.remove('alarm-active');
+        elStatusPill.textContent = 'SYSTEM NORMAL';
+        elStatusPill.classList.remove('alert');
+      }
+      elSpo2.textContent = currentSpo2;
+
+      // 3. NIBP (Dark Red)
+      const currentSys = getRandomInt(CONFIG.sys.min, CONFIG.sys.max);
+      const currentDia = getRandomInt(CONFIG.dia.min, CONFIG.dia.max);
+      const currentMap = Math.round(currentDia + (currentSys - currentDia) / 3);
+
+      elNibp.textContent = `${currentSys}/${currentDia}`;
+      elMap.textContent = `(${currentMap})`;
+
+      // 4. EtCO2 (Orange)
+      const currentEtco2 = getRandomInt(CONFIG.etco2.min, CONFIG.etco2.max);
+      elEtco2.textContent = currentEtco2;
+    }
+
+    /**
+     * Real-time Clock Handler
+     */
+    function updateClock() {
+      const now = new Date();
+      elClock.textContent = now.toTimeString().split(' ')[0];
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    /**
+     * Light Theme Waveforms Animation
+     */
+    function initWaveforms() {
+      const setupWaveformCanvas = (id, color, waveFn) => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let phase = 0;
+
+        setInterval(() => {
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+          const w = canvas.width;
+          const h = canvas.height;
+          
+          ctx.clearRect(0, 0, w, h);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+
+          phase += 0.08;
+          for (let x = 0; x < w; x++) {
+            const t = (x * 0.04) + phase;
+            const y = waveFn(t, h);
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }, 40);
+      };
+
+      // Dark Blue ECG Waveform
+      setupWaveformCanvas('canvas-hr', '#1d4ed8', (t, h) => {
+        const mod = t % (Math.PI * 2);
+        if (mod > 2.0 && mod < 2.25) return h * 0.15;
+        if (mod >= 2.25 && mod < 2.45) return h * 0.85;
+        return h * 0.5 + Math.sin(t * 0.8) * 3;
+      });
+
+      // Teal Pleth Waveform
+      setupWaveformCanvas('canvas-spo2', '#0d9488', (t, h) => {
+        return h * 0.5 + Math.sin(t) * (h * 0.3) + Math.sin(t * 2) * (h * 0.08);
+      });
+
+      // Orange Capnogram Waveform
+      setupWaveformCanvas('canvas-etco2', '#ea580c', (t, h) => {
+        const mod = t % 6;
+        if (mod > 1.2 && mod < 4.2) return h * 0.25;
+        return h * 0.8;
+      });
+    }
+
+    initWaveforms();
+
+    // Start simulation loop
+    updateMonitorReadings();
+    setInterval(updateMonitorReadings, CONFIG.updateIntervalMs);
+  </script>
+</body>
+</html>
