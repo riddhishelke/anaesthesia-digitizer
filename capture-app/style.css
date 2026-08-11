@@ -789,3 +789,86 @@ body {
   color: var(--text-muted);
 }
 
+/* Prominent Case Status Bar Styles */
+.case-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.25rem;
+  border-radius: var(--radius-lg);
+  font-size: 1.05rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.status-main-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.status-icon {
+  font-size: 1.2rem;
+}
+
+.status-waiting {
+  background-color: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: #f59e0b;
+}
+
+.status-recording {
+  background-color: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.status-ended {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+.case-id-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  background-color: var(--surface-card);
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border);
+}
+
+.case-id-label {
+  color: var(--text-muted);
+}
+
+.case-id-val {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.dashboard-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.65rem;
+  background-color: var(--primary-color);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.dashboard-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+

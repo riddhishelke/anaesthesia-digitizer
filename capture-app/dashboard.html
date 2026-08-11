@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Monitor Live Vitals Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .dashboard-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      border-bottom: 1px solid var(--surface-border);
+      padding-bottom: 1.25rem;
+    }
+
+    .dashboard-header h1 {
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .dashboard-header-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .vitals-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .vital-stat-card {
+      background-color: var(--surface-card);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value {
+      font-size: 2.2rem;
+      font-weight: 800;
+      line-height: 1.1;
+      font-family: var(--font-family);
+    }
+
+    .stat-unit {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Distinct Colors for Medical Vitals */
+    .color-hr { color: #22c55e; }
+    .color-spo2 { color: #38bdf8; }
+    .color-bp { color: #f87171; }
+    .color-etco2 { color: #facc15; }
+
+    .border-hr { border-top: 4px solid #22c55e; }
+    .border-spo2 { border-top: 4px solid #38bdf8; }
+    .border-bp { border-top: 4px solid #f87171; }
+    .border-etco2 { border-top: 4px solid #facc15; }
+
+    .chart-card {
+      background-color: var(--surface-card);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-height: 480px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chart-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .chart-wrapper {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      min-height: 380px;
+    }
+
+    .poll-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .poll-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <header class="dashboard-header">
+      <div>
+        <h1>
+          <span>📈</span>
+          Live Vitals Monitoring Dashboard
+        </h1>
+        <p class="subtitle">Real-time medical monitor trends & automated digitizer analytics</p>
+      </div>
+
+      <div class="dashboard-header-controls">
+        <div class="case-id-badge">
+          <span class="case-id-label">Case:</span>
+          <span id="caseIdDisplay" class="case-id-val">Loading...</span>
+        </div>
+        <div class="poll-indicator">
+          <span class="poll-dot"></span>
+          <span id="pollStatusText">Polling (3s)</span>
+        </div>
+        <a id="downloadReportBtn" href="#" class="btn btn-success btn-sm disabled" style="pointer-events: none; opacity: 0.5;" target="_blank">
+          📄 Download Report (PDF)
+        </a>
+        <a href="index.html" class="btn btn-secondary btn-sm">← Back to Capture</a>
+      </div>
+    </header>
+
+    <!-- Summary Stat Cards -->
+    <section class="vitals-summary-grid">
+      <!-- Heart Rate Card -->
+      <div class="vital-stat-card border-hr">
+        <div class="stat-header color-hr">
+          <span>Heart Rate</span>
+          <span>HR</span>
+        </div>
+        <div class="stat-value color-hr" id="valHR">--</div>
+        <div class="stat-unit">Beats per minute (bpm)</div>
+      </div>
+
+      <!-- SpO2 Card -->
+      <div class="vital-stat-card border-spo2">
+        <div class="stat-header color-spo2">
+          <span>SpO2</span>
+          <span>Oxygen</span>
+        </div>
+        <div class="stat-value color-spo2" id="valSpO2">--</div>
+        <div class="stat-unit">Percentage (%)</div>
+      </div>
+
+      <!-- Blood Pressure Card -->
+      <div class="vital-stat-card border-bp">
+        <div class="stat-header color-bp">
+          <span>Blood Pressure</span>
+          <span>BP (Sys)</span>
+        </div>
+        <div class="stat-value color-bp" id="valBP">--</div>
+        <div class="stat-unit">Systolic / Diastolic (mmHg)</div>
+      </div>
+
+      <!-- EtCO2 Card -->
+      <div class="vital-stat-card border-etco2">
+        <div class="stat-header color-etco2">
+          <span>EtCO2</span>
+          <span>Capnography</span>
+        </div>
+        <div class="stat-value color-etco2" id="valEtCO2">--</div>
+        <div class="stat-unit">Millimeters of Mercury (mmHg)</div>
+      </div>
+    </section>
+
+    <!-- Main Chart Card -->
+    <section class="chart-card">
+      <div class="chart-header">
+        <h2 class="chart-title">Patient Vital Signs Trend Analysis</h2>
+        <span class="text-muted" style="font-size: 0.85rem;">Live Multi-Parametric Waveform</span>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="vitalsChart"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const caseIdDisplay = document.getElementById('caseIdDisplay');
+      const valHR = document.getElementById('valHR');
+      const valSpO2 = document.getElementById('valSpO2');
+      const valBP = document.getElementById('valBP');
+      const valEtCO2 = document.getElementById('valEtCO2');
+      const pollStatusText = document.getElementById('pollStatusText');
+
+      // Extract case_id from URL query params
+      const urlParams = new URLSearchParams(window.location.search);
+      let caseId = urlParams.get('case_id');
+
+      // Fallback: Fetch active case from backend if no query param provided
+      if (!caseId) {
+        try {
+          const activeResp = await fetch('http://localhost:8000/active-case');
+          if (activeResp.ok) {
+            const activeData = await activeResp.json();
+            if (activeData && activeData.case_id) {
+              caseId = activeData.case_id;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not fetch active case:', e);
+        }
+      }
+
+      if (!caseId) {
+        caseIdDisplay.textContent = 'No Active Case';
+        pollStatusText.textContent = 'Idle (No Case)';
+        return;
+      }
+
+      caseIdDisplay.textContent = caseId;
+
+      const downloadReportBtn = document.getElementById('downloadReportBtn');
+      if (downloadReportBtn) {
+        downloadReportBtn.href = `http://localhost:8000/case/${encodeURIComponent(caseId)}/report`;
+      }
+
+      // Check if case is ended to enable PDF report download button
+      async function checkCaseStatus() {
+        if (!downloadReportBtn) return;
+        try {
+          const activeResp = await fetch('http://localhost:8000/active-case');
+          if (activeResp.ok) {
+            const activeData = await activeResp.json();
+            // If there's no active case, or the active case is different from our caseId, case is ended
+            if (!activeData.case_id || activeData.case_id !== caseId) {
+              downloadReportBtn.classList.remove('disabled');
+              downloadReportBtn.style.pointerEvents = 'auto';
+              downloadReportBtn.style.opacity = '1';
+              downloadReportBtn.title = 'Download PDF Anaesthesia Chart';
+            } else {
+              downloadReportBtn.classList.add('disabled');
+              downloadReportBtn.style.pointerEvents = 'none';
+              downloadReportBtn.style.opacity = '0.5';
+              downloadReportBtn.title = 'Available once case has ended';
+            }
+          }
+        } catch (e) {
+          console.warn('Could not check active case status:', e);
+        }
+      }
+
+      // Initialize Chart.js Chart
+      const ctx = document.getElementById('vitalsChart').getContext('2d');
+      const vitalsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Heart Rate (bpm)',
+              borderColor: '#22c55e',
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              data: [],
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              spanGaps: true
+            },
+            {
+              label: 'SpO2 (%)',
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              data: [],
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              spanGaps: true
+            },
+            {
+              label: 'Blood Pressure (Systolic)',
+              borderColor: '#f87171',
+              backgroundColor: 'rgba(248, 113, 113, 0.1)',
+              data: [],
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              spanGaps: true
+            },
+            {
+              label: 'EtCO2 (mmHg)',
+              borderColor: '#facc15',
+              backgroundColor: 'rgba(250, 204, 21, 0.1)',
+              data: [],
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              spanGaps: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#f8fafc',
+                font: {
+                  family: 'Inter, sans-serif',
+                  size: 13,
+                  weight: '600'
+                },
+                padding: 20,
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1e293b',
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              borderColor: '#334155',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Timestamp',
+                color: '#94a3b8',
+                font: { family: 'Inter', size: 12, weight: '600' }
+              },
+              grid: {
+                color: 'rgba(51, 65, 85, 0.5)'
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: { family: 'Inter', size: 11 }
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Measurement Value',
+                color: '#94a3b8',
+                font: { family: 'Inter', size: 12, weight: '600' }
+              },
+              min: 0,
+              max: 250,
+              grid: {
+                color: 'rgba(51, 65, 85, 0.5)'
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: { family: 'Inter', size: 11 }
+              }
+            }
+          }
+        }
+      });
+
+      // Poll backend every 3 seconds for updated readings & case status
+      async function fetchReadings() {
+        await checkCaseStatus();
+        try {
+          const response = await fetch(`http://localhost:8000/case/${encodeURIComponent(caseId)}/readings`);
+          if (!response.ok) return;
+
+          const data = await response.json();
+          const readings = data.readings || [];
+
+          if (readings.length === 0) return;
+
+          const labels = [];
+          const hrData = [];
+          const spo2Data = [];
+          const bpData = [];
+          const etco2Data = [];
+
+          readings.forEach(r => {
+            let timeLabel = r.timestamp;
+            try {
+              const d = new Date(r.timestamp);
+              timeLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch (e) {}
+
+            labels.push(timeLabel);
+            hrData.push(r.heart_rate !== null ? r.heart_rate : null);
+            spo2Data.push(r.spo2 !== null ? r.spo2 : null);
+            bpData.push(r.bp_systolic !== null ? r.bp_systolic : null);
+            etco2Data.push(r.etco2 !== null ? r.etco2 : null);
+          });
+
+          // Update Summary Stat Cards with latest reading
+          const latest = readings[readings.length - 1];
+          valHR.textContent = latest.heart_rate !== null ? Math.round(latest.heart_rate) : '--';
+          valSpO2.textContent = latest.spo2 !== null ? Math.round(latest.spo2) : '--';
+          
+          if (latest.bp_systolic !== null && latest.bp_diastolic !== null) {
+            valBP.textContent = `${Math.round(latest.bp_systolic)}/${Math.round(latest.bp_diastolic)}`;
+          } else {
+            valBP.textContent = '--';
+          }
+          
+          valEtCO2.textContent = latest.etco2 !== null ? Math.round(latest.etco2) : '--';
+
+          // Update Chart Data
+          vitalsChart.data.labels = labels;
+          vitalsChart.data.datasets[0].data = hrData;
+          vitalsChart.data.datasets[1].data = spo2Data;
+          vitalsChart.data.datasets[2].data = bpData;
+          vitalsChart.data.datasets[3].data = etco2Data;
+          vitalsChart.update('none');
+
+        } catch (err) {
+          console.error('Error fetching case readings:', err);
+        }
+      }
+
+      // Initial fetch + 3-second polling interval
+      fetchReadings();
+      setInterval(fetchReadings, 3000);
+    });
+  </script>
+</body>
+</html>

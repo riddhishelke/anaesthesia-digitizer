@@ -3,19 +3,30 @@ import os
 import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 
 try:
     from validation import validate_reading
     from smoothing import get_smoothed_value
+    from database import init_db, get_case_readings, get_active_case
+    from case_manager import process_cycle
+    from report_generator import generate_report_html, generate_report_pdf
 except ImportError:
     from backend.validation import validate_reading
     from backend.smoothing import get_smoothed_value
+    from backend.database import init_db, get_case_readings, get_active_case
+    from backend.case_manager import process_cycle
+    from backend.report_generator import generate_report_html, generate_report_pdf
 
 load_dotenv()
 
 app = FastAPI()
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
 
 app.add_middleware(
     CORSMiddleware,
@@ -150,4 +161,34 @@ async def read_value(
     except Exception:
         smoothed = get_smoothed_value(field_type, None)
         return {"raw_value": None, "smoothed_value": smoothed, "status": "error"}
+
+
+@app.post("/process-cycle")
+async def process_monitoring_cycle(payload: dict):
+    readings = payload.get("readings", payload)
+    return process_cycle(readings)
+
+
+@app.get("/case/{case_id}/readings")
+def get_readings_for_case(case_id: str):
+    readings = get_case_readings(case_id)
+    return {"case_id": case_id, "readings": readings}
+
+
+@app.get("/active-case")
+def get_current_active_case():
+    case_id = get_active_case()
+    return {"case_id": case_id}
+
+
+@app.get("/case/{case_id}/report")
+def get_case_report_pdf(case_id: str):
+    filename = f"anaesthesia_report_{case_id}.pdf"
+    pdf_bytes = generate_report_pdf(case_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 

@@ -623,9 +623,12 @@ document.addEventListener('DOMContentLoaded', () => {
       { key: 'etco2', fieldType: 'etco2' }
     ];
 
+    const cycleResults = {};
+
     const tasks = fieldsMap.map(({ key, fieldType }) => {
       const region = calibration.regions[key];
       if (!region || !region.width || !region.height) {
+        cycleResults[fieldType] = { raw_value: null, smoothed_value: null, status: "error" };
         updateFieldUI(fieldType, null, null, 'error');
         return Promise.resolve();
       }
@@ -636,6 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const rh = Math.round(region.height * scaleY);
 
       if (rw <= 0 || rh <= 0) {
+        cycleResults[fieldType] = { raw_value: null, smoothed_value: null, status: "error" };
         updateFieldUI(fieldType, null, null, 'error');
         return Promise.resolve();
       }
@@ -650,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return new Promise((resolve) => {
         cropCanvas.toBlob(async (blob) => {
           if (!blob) {
+            cycleResults[fieldType] = { raw_value: null, smoothed_value: null, status: "error" };
             updateFieldUI(fieldType, null, null, 'error');
             resolve();
             return;
@@ -666,12 +671,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!resp.ok) {
+              cycleResults[fieldType] = { raw_value: null, smoothed_value: null, status: "error" };
               updateFieldUI(fieldType, null, null, 'error');
               resolve();
               return;
             }
 
             const resData = await resp.json();
+            cycleResults[fieldType] = resData;
             updateFieldUI(
               fieldType,
               resData.raw_value,
@@ -680,6 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
             );
           } catch (err) {
             console.error(`Failed sending ROI frame for ${fieldType}:`, err);
+            cycleResults[fieldType] = { raw_value: null, smoothed_value: null, status: "error" };
             updateFieldUI(fieldType, null, null, 'error');
           }
           resolve();
@@ -688,6 +696,99 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     await Promise.all(tasks);
+
+    // Construct exact cycle payload
+    const getVal = (fieldType) => (cycleResults[fieldType]?.status === 'ok' ? cycleResults[fieldType].smoothed_value : null);
+
+    const hrVal = getVal('heart_rate');
+    const spo2Val = getVal('spo2');
+    const etco2Val = getVal('etco2');
+
+    let bpSys = null;
+    let bpDia = null;
+    const bpVal = getVal('blood_pressure');
+    if (typeof bpVal === 'string') {
+      const match = bpVal.match(/^(\d+)\/(\d+)$/);
+      if (match) {
+        bpSys = parseFloat(match[1]);
+        bpDia = parseFloat(match[2]);
+      }
+    }
+
+    const cyclePayload = {
+      heart_rate: hrVal,
+      spo2: spo2Val,
+      bp_systolic: bpSys,
+      bp_diastolic: bpDia,
+      etco2: etco2Val
+    };
+
+    // Send single cycle payload to /process-cycle for rule-based case tracking
+    try {
+      const cycleResp = await fetch('http://localhost:8000/process-cycle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cyclePayload)
+      });
+
+      if (cycleResp.ok) {
+        const caseRes = await cycleResp.json();
+        updateTopCaseStatus(caseRes.status, caseRes.case_id);
+
+        const msg = caseRes.message || caseRes.status;
+        const displayLabel = caseRes.case_id ? `${msg} (${caseRes.case_id})` : msg;
+        
+        if (caseRes.status === 'recording' || caseRes.status === 'case_started') {
+          updateMonitoringStatus('live', displayLabel);
+        } else if (caseRes.status === 'case_ended') {
+          updateMonitoringStatus('frozen', displayLabel);
+        } else {
+          updateMonitoringStatus('connecting', displayLabel);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to post cycle to /process-cycle:', err);
+    }
+  }
+
+  function updateTopCaseStatus(status, caseId) {
+    const caseStatusBar = document.getElementById('caseStatusBar');
+    const caseStatusIcon = document.getElementById('caseStatusIcon');
+    const caseStatusText = document.getElementById('caseStatusText');
+    const caseIdBadge = document.getElementById('caseIdBadge');
+    const caseIdText = document.getElementById('caseIdText');
+
+    if (!caseStatusBar) return;
+
+    caseStatusBar.className = 'case-status-bar';
+
+    if (status === 'case_started' || status === 'recording') {
+      caseStatusBar.classList.add('status-recording');
+      if (caseStatusIcon) caseStatusIcon.textContent = '🟢';
+      if (caseStatusText) caseStatusText.textContent = 'Case Started — Recording';
+    } else if (status === 'case_ended') {
+      caseStatusBar.classList.add('status-ended');
+      if (caseStatusIcon) caseStatusIcon.textContent = '🔴';
+      if (caseStatusText) caseStatusText.textContent = 'Case Ended';
+    } else {
+      caseStatusBar.classList.add('status-waiting');
+      if (caseStatusIcon) caseStatusIcon.textContent = '⏳';
+      if (caseStatusText) caseStatusText.textContent = 'Waiting for stable signal';
+    }
+
+    const dashboardLink = document.getElementById('dashboardLink');
+
+    if (caseIdBadge && caseIdText) {
+      if (caseId) {
+        caseIdText.textContent = caseId;
+        caseIdBadge.classList.remove('hidden');
+        if (dashboardLink) {
+          dashboardLink.href = `dashboard.html?case_id=${encodeURIComponent(caseId)}`;
+        }
+      } else {
+        caseIdBadge.classList.add('hidden');
+      }
+    }
   }
 
   function updateFieldUI(fieldType, rawValue, smoothedValue, status) {

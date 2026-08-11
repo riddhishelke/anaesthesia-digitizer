@@ -43,6 +43,21 @@
     </nav>
 
     <main class="app-main">
+      <!-- Prominent Case Status Banner -->
+      <div id="caseStatusBar" class="case-status-bar status-waiting">
+        <div class="status-main-info">
+          <span class="status-icon" id="caseStatusIcon">⏳</span>
+          <span class="status-label" id="caseStatusText">Waiting for stable signal</span>
+        </div>
+        <div id="caseIdBadge" class="case-id-badge hidden">
+          <span class="case-id-label">Active Case:</span>
+          <span id="caseIdText" class="case-id-val">--</span>
+          <a id="dashboardLink" href="dashboard.html" target="_blank" class="dashboard-btn">
+            View Live Dashboard ↗
+          </a>
+        </div>
+      </div>
+
       <!-- Success Message Banner -->
       <div id="saveSuccessBanner" class="save-success-banner hidden">
         <div class="banner-icon">✓</div>
