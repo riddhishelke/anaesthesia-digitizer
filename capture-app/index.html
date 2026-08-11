@@ -206,6 +206,91 @@
           </div>
         </div>
       </div>
+
+      <!-- Live Monitoring & AI Digitizer Section -->
+      <div id="monitoringSection" class="monitoring-section hidden">
+        <div class="panel-card monitoring-card">
+          <div class="card-header monitoring-header">
+            <div>
+              <h3>Live Monitor Digitizer</h3>
+              <p class="section-subtext">Real-time vision AI field extraction & rolling median smoothing</p>
+            </div>
+            <div class="monitoring-controls">
+              <button id="startMonitoringBtn" class="btn btn-success">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Start Monitoring
+              </button>
+              <button id="stopMonitoringBtn" class="btn btn-danger hidden">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12"></rect>
+                </svg>
+                Stop Monitoring
+              </button>
+              <div id="monitoringStatusBadge" class="status-badge status-connecting">
+                <span class="status-dot"></span>
+                <span id="monitoringStatusText">Idle</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Readouts Grid -->
+          <div class="readouts-grid">
+            <!-- Heart Rate Readout -->
+            <div class="readout-card" data-field="heart_rate">
+              <div class="readout-header">
+                <span class="readout-label">Heart Rate</span>
+                <div class="readout-status">
+                  <span class="status-dot-indicator dot-gray" id="dot-heart_rate"></span>
+                  <span class="status-text-indicator" id="status-heart_rate">offline</span>
+                </div>
+              </div>
+              <div class="readout-value" id="smoothed-heart_rate">--</div>
+              <div class="readout-sub text-muted">Raw: <span id="raw-heart_rate">--</span></div>
+            </div>
+
+            <!-- SpO2 Readout -->
+            <div class="readout-card" data-field="spo2">
+              <div class="readout-header">
+                <span class="readout-label">SpO2</span>
+                <div class="readout-status">
+                  <span class="status-dot-indicator dot-gray" id="dot-spo2"></span>
+                  <span class="status-text-indicator" id="status-spo2">offline</span>
+                </div>
+              </div>
+              <div class="readout-value" id="smoothed-spo2">--</div>
+              <div class="readout-sub text-muted">Raw: <span id="raw-spo2">--</span></div>
+            </div>
+
+            <!-- Blood Pressure Readout -->
+            <div class="readout-card" data-field="blood_pressure">
+              <div class="readout-header">
+                <span class="readout-label">Blood Pressure</span>
+                <div class="readout-status">
+                  <span class="status-dot-indicator dot-gray" id="dot-blood_pressure"></span>
+                  <span class="status-text-indicator" id="status-blood_pressure">offline</span>
+                </div>
+              </div>
+              <div class="readout-value" id="smoothed-blood_pressure">--</div>
+              <div class="readout-sub text-muted">Raw: <span id="raw-blood_pressure">--</span></div>
+            </div>
+
+            <!-- EtCO2 Readout -->
+            <div class="readout-card" data-field="etco2">
+              <div class="readout-header">
+                <span class="readout-label">EtCO2</span>
+                <div class="readout-status">
+                  <span class="status-dot-indicator dot-gray" id="dot-etco2"></span>
+                  <span class="status-text-indicator" id="status-etco2">offline</span>
+                </div>
+              </div>
+              <div class="readout-value" id="smoothed-etco2">--</div>
+              <div class="readout-sub text-muted">Raw: <span id="raw-etco2">--</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 

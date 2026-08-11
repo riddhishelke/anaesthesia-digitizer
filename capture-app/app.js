@@ -348,6 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'Calibration Saved!',
         'Calibration saved! You can now start monitoring.'
       );
+      showMonitoringSection();
     } catch (e) {
       console.error('Failed to save calibration to localStorage:', e);
       alert('Failed to save to localStorage.');
@@ -375,6 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
       'File Downloaded!',
       'Calibration saved! You can now start monitoring.'
     );
+    showMonitoringSection();
   }
 
   // Display Success Banner
@@ -519,6 +521,206 @@ document.addEventListener('DOMContentLoaded', () => {
     cameraError.classList.add('hidden');
   }
 
+  // Live Monitoring & Backend Communication State
+  let monitoringInterval = null;
+  let isMonitoring = false;
+
+  const startMonitoringBtn = document.getElementById('startMonitoringBtn');
+  const stopMonitoringBtn = document.getElementById('stopMonitoringBtn');
+  const monitoringSection = document.getElementById('monitoringSection');
+  const monitoringStatusBadge = document.getElementById('monitoringStatusBadge');
+  const monitoringStatusText = document.getElementById('monitoringStatusText');
+
+  function showMonitoringSection() {
+    if (monitoringSection) {
+      monitoringSection.classList.remove('hidden');
+    }
+  }
+
+  function updateMonitoringStatus(state, label) {
+    if (monitoringStatusBadge) {
+      monitoringStatusBadge.className = `status-badge status-${state}`;
+    }
+    if (monitoringStatusText) {
+      monitoringStatusText.textContent = label;
+    }
+  }
+
+  function startMonitoring() {
+    if (isMonitoring) return;
+
+    const savedStr = localStorage.getItem('monitorCalibration');
+    if (!savedStr) {
+      alert('No saved calibration found. Please complete calibration first.');
+      return;
+    }
+
+    let calibration;
+    try {
+      calibration = JSON.parse(savedStr);
+    } catch (e) {
+      alert('Invalid calibration data found in localStorage.');
+      return;
+    }
+
+    if (!calibration.regions || !calibration.regions.heartRate) {
+      alert('Incomplete calibration data.');
+      return;
+    }
+
+    isMonitoring = true;
+    if (startMonitoringBtn) startMonitoringBtn.classList.add('hidden');
+    if (stopMonitoringBtn) stopMonitoringBtn.classList.remove('hidden');
+    updateMonitoringStatus('live', 'Monitoring Active (5s)');
+
+    // Run first capture cycle immediately, then every 5 seconds
+    captureAndProcessReadings(calibration);
+    monitoringInterval = setInterval(() => {
+      captureAndProcessReadings(calibration);
+    }, 5000);
+  }
+
+  function stopMonitoring() {
+    if (!isMonitoring) return;
+    isMonitoring = false;
+    if (monitoringInterval) {
+      clearInterval(monitoringInterval);
+      monitoringInterval = null;
+    }
+    if (startMonitoringBtn) startMonitoringBtn.classList.remove('hidden');
+    if (stopMonitoringBtn) stopMonitoringBtn.classList.add('hidden');
+    updateMonitoringStatus('connecting', 'Monitoring Paused');
+  }
+
+  async function captureAndProcessReadings(calibration) {
+    if (!webcamFeed || webcamFeed.paused || webcamFeed.ended || webcamFeed.readyState < 2) {
+      console.warn('Camera feed not ready for monitoring capture');
+      return;
+    }
+
+    const width = webcamFeed.videoWidth || TARGET_WIDTH;
+    const height = webcamFeed.videoHeight || TARGET_HEIGHT;
+
+    // Capture full frame to canvas
+    const fullCanvas = document.createElement('canvas');
+    fullCanvas.width = width;
+    fullCanvas.height = height;
+    const fullCtx = fullCanvas.getContext('2d');
+
+    if (isFrozen && offscreenCanvas.width > 0) {
+      fullCtx.drawImage(offscreenCanvas, 0, 0, width, height);
+    } else {
+      fullCtx.drawImage(webcamFeed, 0, 0, width, height);
+    }
+
+    const scaleX = width / (calibration.frameWidth || width);
+    const scaleY = height / (calibration.frameHeight || height);
+
+    const fieldsMap = [
+      { key: 'heartRate', fieldType: 'heart_rate' },
+      { key: 'spo2', fieldType: 'spo2' },
+      { key: 'bloodPressure', fieldType: 'blood_pressure' },
+      { key: 'etco2', fieldType: 'etco2' }
+    ];
+
+    const tasks = fieldsMap.map(({ key, fieldType }) => {
+      const region = calibration.regions[key];
+      if (!region || !region.width || !region.height) {
+        updateFieldUI(fieldType, null, null, 'error');
+        return Promise.resolve();
+      }
+
+      const rx = Math.round(region.x * scaleX);
+      const ry = Math.round(region.y * scaleY);
+      const rw = Math.round(region.width * scaleX);
+      const rh = Math.round(region.height * scaleY);
+
+      if (rw <= 0 || rh <= 0) {
+        updateFieldUI(fieldType, null, null, 'error');
+        return Promise.resolve();
+      }
+
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = rw;
+      cropCanvas.height = rh;
+      const cropCtx = cropCanvas.getContext('2d');
+
+      cropCtx.drawImage(fullCanvas, rx, ry, rw, rh, 0, 0, rw, rh);
+
+      return new Promise((resolve) => {
+        cropCanvas.toBlob(async (blob) => {
+          if (!blob) {
+            updateFieldUI(fieldType, null, null, 'error');
+            resolve();
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('file', blob, `${fieldType}.jpg`);
+          formData.append('field_type', fieldType);
+
+          try {
+            const resp = await fetch('http://localhost:8000/read-value', {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!resp.ok) {
+              updateFieldUI(fieldType, null, null, 'error');
+              resolve();
+              return;
+            }
+
+            const resData = await resp.json();
+            updateFieldUI(
+              fieldType,
+              resData.raw_value,
+              resData.smoothed_value,
+              resData.status
+            );
+          } catch (err) {
+            console.error(`Failed sending ROI frame for ${fieldType}:`, err);
+            updateFieldUI(fieldType, null, null, 'error');
+          }
+          resolve();
+        }, 'image/jpeg', 0.9);
+      });
+    });
+
+    await Promise.all(tasks);
+  }
+
+  function updateFieldUI(fieldType, rawValue, smoothedValue, status) {
+    const smoothedEl = document.getElementById(`smoothed-${fieldType}`);
+    const rawEl = document.getElementById(`raw-${fieldType}`);
+    const dotEl = document.getElementById(`dot-${fieldType}`);
+    const statusEl = document.getElementById(`status-${fieldType}`);
+
+    if (smoothedEl) {
+      smoothedEl.textContent = smoothedValue !== null && smoothedValue !== undefined ? smoothedValue : '--';
+    }
+    if (rawEl) {
+      rawEl.textContent = rawValue !== null && rawValue !== undefined ? rawValue : '--';
+    }
+
+    if (dotEl && statusEl) {
+      dotEl.className = 'status-dot-indicator';
+      if (status === 'ok') {
+        dotEl.classList.add('dot-green');
+        statusEl.textContent = 'ok';
+      } else if (status === 'unreadable') {
+        dotEl.classList.add('dot-gray');
+        statusEl.textContent = 'unreadable';
+      } else if (status === 'invalid_range') {
+        dotEl.classList.add('dot-red');
+        statusEl.textContent = 'invalid range';
+      } else {
+        dotEl.classList.add('dot-red');
+        statusEl.textContent = 'error';
+      }
+    }
+  }
+
   // Check for existing saved calibration in localStorage
   function checkSavedCalibration() {
     try {
@@ -527,6 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const savedData = JSON.parse(savedStr);
         if (savedData && savedData.regions) {
           console.log('Saved monitor calibration found in localStorage:', savedData);
+          showMonitoringSection();
         }
       }
     } catch (e) {
@@ -539,6 +742,12 @@ document.addEventListener('DOMContentLoaded', () => {
   retakeBtn.addEventListener('click', retakeFrame);
   if (retryCameraBtn) {
     retryCameraBtn.addEventListener('click', initCamera);
+  }
+  if (startMonitoringBtn) {
+    startMonitoringBtn.addEventListener('click', startMonitoring);
+  }
+  if (stopMonitoringBtn) {
+    stopMonitoringBtn.addEventListener('click', stopMonitoring);
   }
 
   // Initialize

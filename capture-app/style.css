@@ -673,3 +673,119 @@ body {
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
+
+/* Live Monitoring Section Styles */
+.monitoring-section {
+  margin-top: 1rem;
+}
+
+.monitoring-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.monitoring-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.section-subtext {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.monitoring-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.readouts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+}
+
+.readout-card {
+  background-color: var(--surface-item);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.readout-card:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-2px);
+}
+
+.readout-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.readout-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.readout-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-dot-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dot-green {
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.dot-gray {
+  background-color: #6b7280;
+}
+
+.dot-red {
+  background-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.status-text-indicator {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.readout-value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-family: var(--font-family);
+}
+
+.readout-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
