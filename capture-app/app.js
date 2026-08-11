@@ -796,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rawEl = document.getElementById(`raw-${fieldType}`);
     const dotEl = document.getElementById(`dot-${fieldType}`);
     const statusEl = document.getElementById(`status-${fieldType}`);
+    const noteEl = document.getElementById(`note-${fieldType}`);
 
     if (smoothedEl) {
       smoothedEl.textContent = smoothedValue !== null && smoothedValue !== undefined ? smoothedValue : '--';
@@ -806,18 +807,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (dotEl && statusEl) {
       dotEl.className = 'status-dot-indicator';
+
       if (status === 'ok') {
         dotEl.classList.add('dot-green');
         statusEl.textContent = 'ok';
+        if (noteEl) noteEl.classList.add('hidden');
+      } else if (status === 'bad_frame') {
+        dotEl.classList.add('dot-orange');
+        statusEl.textContent = 'bad frame';
+        if (noteEl) noteEl.classList.remove('hidden');
       } else if (status === 'unreadable') {
         dotEl.classList.add('dot-gray');
         statusEl.textContent = 'unreadable';
+        if (noteEl) noteEl.classList.remove('hidden');
       } else if (status === 'invalid_range') {
         dotEl.classList.add('dot-red');
         statusEl.textContent = 'invalid range';
+        if (noteEl) noteEl.classList.remove('hidden');
+        console.warn(`[Digitizer Warning] Invalid range for ${fieldType}: raw=${rawValue}, holding last smoothed=${smoothedValue}`);
       } else {
         dotEl.classList.add('dot-red');
         statusEl.textContent = 'error';
+        if (noteEl) noteEl.classList.remove('hidden');
+        console.warn(`[Digitizer Error] Processing error for ${fieldType}: status=${status}, holding last smoothed=${smoothedValue}`);
       }
     }
   }

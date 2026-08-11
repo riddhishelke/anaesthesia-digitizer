@@ -13,12 +13,14 @@ try:
     from database import init_db, get_case_readings, get_active_case
     from case_manager import process_cycle
     from report_generator import generate_report_html, generate_report_pdf
+    from preprocessing import preprocess_image, is_frame_too_bad
 except ImportError:
     from backend.validation import validate_reading
     from backend.smoothing import get_smoothed_value
     from backend.database import init_db, get_case_readings, get_active_case
     from backend.case_manager import process_cycle
     from backend.report_generator import generate_report_html, generate_report_pdf
+    from backend.preprocessing import preprocess_image, is_frame_too_bad
 
 load_dotenv()
 
@@ -95,16 +97,24 @@ async def read_value(
             detail="File size exceeds maximum limit of 2MB."
         )
 
-    # 4. OpenAI Vision API processing
+    # 4. Image Quality Pre-check: Skip AI call if severe glare or camera obstruction
+    if is_frame_too_bad(contents):
+        smoothed = get_smoothed_value(field_type, None)
+        return {"raw_value": None, "smoothed_value": smoothed, "status": "bad_frame"}
+
+    # 5. OpenAI Vision API processing
     try:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key or api_key == "your_key_here":
             smoothed = get_smoothed_value(field_type, None)
             return {"raw_value": None, "smoothed_value": smoothed, "status": "error"}
 
+        # Preprocess crop image for optimal vision AI clarity (grayscale, autocontrast, sharpening)
+        processed_contents = preprocess_image(contents)
+
         client = OpenAI(api_key=api_key)
-        base64_image = base64.b64encode(contents).decode("utf-8")
-        media_type = file.content_type or "image/jpeg"
+        base64_image = base64.b64encode(processed_contents).decode("utf-8")
+        media_type = "image/jpeg"
 
         prompt = PROMPTS[field_type]
 

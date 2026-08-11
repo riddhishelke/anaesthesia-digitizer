@@ -760,6 +760,11 @@ body {
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
+.dot-orange {
+  background-color: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
 .dot-gray {
   background-color: #6b7280;
 }
@@ -775,6 +780,13 @@ body {
   font-weight: 500;
 }
 
+.readout-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .readout-value {
   font-size: 1.85rem;
   font-weight: 700;
@@ -782,6 +794,19 @@ body {
   letter-spacing: -0.02em;
   line-height: 1.1;
   font-family: var(--font-family);
+}
+
+.holding-note {
+  font-size: 0.72rem;
+  color: #f59e0b;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background-color: rgba(245, 158, 11, 0.12);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .readout-sub {
