@@ -760,6 +760,11 @@ body {
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
+.dot-purple {
+  background-color: #a855f7;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
+}
+
 .dot-orange {
   background-color: #f59e0b;
   box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);

@@ -215,6 +215,35 @@
       from { border-color: #ff0000; box-shadow: inset 0 0 25px rgba(255, 0, 0, 0.45); }
       to { border-color: #550000; box-shadow: inset 0 0 5px rgba(255, 0, 0, 0.15); }
     }
+
+    /* Subtle Trigger Button for Critical Event (non-medical UI) */
+    .subtle-event-btn {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 10;
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-family: system-ui, -apple-system, sans-serif;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-left: 0;
+    }
+    .subtle-event-btn:hover:not(:disabled) {
+      background: #334155;
+      color: #f8fafc;
+      border-color: #475569;
+    }
+    .subtle-event-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      background: #0f172a;
+      color: #64748b;
+    }
   </style>
 </head>
 <body>
@@ -227,7 +256,9 @@
       <span>BED: <strong>04</strong></span>
       <span id="clock-display">00:00:00</span>
     </div>
-    <div id="status-badge" class="status-badge">MONITORING</div>
+    <div style="display: flex; align-items: center;">
+      <div id="status-badge" class="status-badge">MONITORING</div>
+    </div>
   </header>
 
   <!-- 2x2 Monitor Grid -->
@@ -303,6 +334,9 @@
 
   </main>
 
+  <!-- Simulator control: intentionally outside the monitor interface. -->
+  <button id="btn-trigger-event" class="subtle-event-btn" title="Trigger 45-Second Desaturation Event Sequence">Trigger Critical Event</button>
+
   <!-- Simulation Control Script -->
   <script>
     /* ==========================================================================
@@ -335,6 +369,34 @@
     const elCardSpo2 = document.getElementById('card-spo2');
     const elStatusBadge = document.getElementById('status-badge');
     const elClock = document.getElementById('clock-display');
+    const btnTriggerEvent = document.getElementById('btn-trigger-event');
+
+    // Critical Event State
+    let isCriticalEventActive = false;
+    let criticalEventStartTime = null;
+    let eventStartSpo2 = 98;
+    let eventStartHr = 72;
+
+    function triggerCriticalEvent() {
+      if (isCriticalEventActive) return;
+      isCriticalEventActive = true;
+      criticalEventStartTime = Date.now();
+
+      // Store current baseline readings
+      eventStartHr = parseInt(elHr.textContent) || 72;
+      eventStartSpo2 = parseInt(elSpo2.textContent) || 98;
+
+      if (btnTriggerEvent) {
+        btnTriggerEvent.disabled = true;
+        btnTriggerEvent.textContent = 'Event in progress...';
+      }
+
+      updateMonitorReadings();
+    }
+
+    if (btnTriggerEvent) {
+      btnTriggerEvent.addEventListener('click', triggerCriticalEvent);
+    }
 
     /**
      * Helper: Generate a random integer in inclusive range [min, max]
@@ -349,28 +411,72 @@
     function updateMonitorReadings() {
       cycleCount++;
 
-      // Trigger an anomaly reading every N cycles (~30s)
-      const isAnomalyCycle = (cycleCount % CONFIG.anomalyIntervalCycles === 0);
-
-      // 1. HR (Heart Rate) - Green
-      const currentHr = getRandomInt(CONFIG.hr.min, CONFIG.hr.max);
-      elHr.textContent = currentHr;
-
-      // 2. SpO2 (Oxygen Saturation) - Cyan
+      let currentHr;
       let currentSpo2;
-      if (isAnomalyCycle) {
-        // Inject abnormal reading (dip to 88%)
-        currentSpo2 = CONFIG.abnormalSpo2Value;
+
+      if (isCriticalEventActive) {
+        const elapsedMs = Date.now() - criticalEventStartTime;
+
+        if (elapsedMs <= 15000) {
+          // Phase 1 (0-15s): SpO2 gradually declines to 84-86%, HR gradually rises to 125-135 bpm
+          const t = Math.min(1, elapsedMs / 15000);
+          const targetSpo2 = 85;
+          const targetHr = 130;
+
+          currentSpo2 = Math.round(eventStartSpo2 + (targetSpo2 - eventStartSpo2) * t) + getRandomInt(-1, 1);
+          currentHr = Math.round(eventStartHr + (targetHr - eventStartHr) * t) + getRandomInt(-2, 2);
+        } else if (elapsedMs <= 30000) {
+          // Phase 2 (15-30s): Hold SpO2 around 84-86% and HR around 125-135 bpm (critical plateau)
+          currentSpo2 = getRandomInt(84, 86);
+          currentHr = getRandomInt(125, 135);
+        } else if (elapsedMs <= 45000) {
+          // Phase 3 (30-45s): Gradually recover — SpO2 climbing back to 96-99%, HR coming back down to 65-85 bpm
+          const t = Math.min(1, (elapsedMs - 30000) / 15000);
+          const startRecSpo2 = 85;
+          const endRecSpo2 = 98;
+          const startRecHr = 130;
+          const endRecHr = 72;
+
+          currentSpo2 = Math.round(startRecSpo2 + (endRecSpo2 - startRecSpo2) * t) + getRandomInt(-1, 1);
+          currentHr = Math.round(startRecHr + (endRecHr - startRecHr) * t) + getRandomInt(-2, 2);
+        } else {
+          // Phase 4 (After 45s): Event finished -> Reset state & button, resume normal random fluctuation
+          isCriticalEventActive = false;
+          if (btnTriggerEvent) {
+            btnTriggerEvent.disabled = false;
+            btnTriggerEvent.textContent = 'Trigger Critical Event';
+          }
+          currentHr = getRandomInt(CONFIG.hr.min, CONFIG.hr.max);
+          currentSpo2 = getRandomInt(CONFIG.spo2.min, CONFIG.spo2.max);
+        }
+      } else {
+        // Normal simulation fluctuation
+        const isAnomalyCycle = (cycleCount % CONFIG.anomalyIntervalCycles === 0);
+        currentHr = getRandomInt(CONFIG.hr.min, CONFIG.hr.max);
+        if (isAnomalyCycle) {
+          currentSpo2 = CONFIG.abnormalSpo2Value;
+        } else {
+          currentSpo2 = getRandomInt(CONFIG.spo2.min, CONFIG.spo2.max);
+        }
+      }
+
+      // Clamp display values within safe physiological bounds
+      currentSpo2 = Math.max(70, Math.min(100, currentSpo2));
+      currentHr = Math.max(40, Math.min(220, currentHr));
+
+      elHr.textContent = currentHr;
+      elSpo2.textContent = currentSpo2;
+
+      // Alarm state handling
+      if (currentSpo2 < 90) {
         elCardSpo2.classList.add('alarm-active');
         elStatusBadge.textContent = 'ALARM: SPO2 LOW';
         elStatusBadge.classList.add('alert');
       } else {
-        currentSpo2 = getRandomInt(CONFIG.spo2.min, CONFIG.spo2.max);
         elCardSpo2.classList.remove('alarm-active');
         elStatusBadge.textContent = 'MONITORING';
         elStatusBadge.classList.remove('alert');
       }
-      elSpo2.textContent = currentSpo2;
 
       // 3. NIBP (Blood Pressure) - Red/White
       const currentSys = getRandomInt(CONFIG.sys.min, CONFIG.sys.max);

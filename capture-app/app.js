@@ -15,6 +15,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const stepTitle = document.getElementById('stepTitle');
   const cameraError = document.getElementById('cameraError');
   const retryCameraBtn = document.getElementById('retryCameraBtn');
+  const cameraSelect = document.getElementById('cameraSelect');
+  const screenShareBtn = document.getElementById('screenShareBtn');
+  const simulatedFeedBtn = document.getElementById('simulatedFeedBtn');
+  const errorScreenShareBtn = document.getElementById('errorScreenShareBtn');
+  const errorSimulatedBtn = document.getElementById('errorSimulatedBtn');
+  const errorIcon = document.getElementById('errorIcon');
+  const errorTitle = document.getElementById('errorTitle');
+  const errorMessage = document.getElementById('errorMessage');
+  const errorDiagnosticHint = document.getElementById('errorDiagnosticHint');
   const statusBadge = document.getElementById('statusBadge');
   const statusText = document.getElementById('statusText');
   const actualResText = document.getElementById('actualResText');
@@ -43,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Application State
   let mediaStream = null;
+  let simulatedAnimationId = null;
   let isFrozen = false;
   let isDrawing = false;
   let startX = 0, startY = 0, currentX = 0, currentY = 0;
@@ -56,21 +66,82 @@ document.addEventListener('DOMContentLoaded', () => {
   const TARGET_WIDTH = 1280;
   const TARGET_HEIGHT = 720;
 
-  // Initialize Camera Access via getUserMedia
-  async function initCamera() {
+  // Stop any existing stream or active simulation
+  function stopActiveStream() {
+    if (simulatedAnimationId) {
+      cancelAnimationFrame(simulatedAnimationId);
+      simulatedAnimationId = null;
+    }
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream = null;
+    }
+  }
+
+  // Populate available video input devices in camera dropdown
+  async function populateCameraDevices() {
+    if (!cameraSelect || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      // Preserve current select value if possible
+      const currentVal = cameraSelect.value;
+      cameraSelect.innerHTML = '<option value="">Default Camera</option>';
+      
+      videoDevices.forEach((device, idx) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Camera ${idx + 1} (${device.deviceId.slice(0, 6)}...)`;
+        cameraSelect.appendChild(option);
+      });
+      if (currentVal) cameraSelect.value = currentVal;
+    } catch (e) {
+      console.warn('Could not enumerate camera devices:', e);
+    }
+  }
+
+  // Initialize Camera Access via getUserMedia with constraint fallbacks
+  async function initCamera(selectedDeviceId = null) {
+    stopActiveStream();
     hideError();
     updateStatus('connecting', 'Connecting camera...');
     freezeBtn.disabled = true;
 
+    // Check secure context / mediaDevices support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const isFileProtocol = window.location.protocol === 'file:';
+      const isHttpNonLocal = window.location.protocol === 'http:' && 
+                             window.location.hostname !== 'localhost' && 
+                             window.location.hostname !== '127.0.0.1';
+      
+      const errReason = isFileProtocol || isHttpNonLocal
+        ? 'InsecureContext'
+        : 'NotSupported';
+
+      const customErr = new Error('MediaDevices API not available in this context');
+      customErr.name = errReason;
+      showError(customErr);
+      return;
+    }
+
+    const targetDeviceId = selectedDeviceId || (cameraSelect ? cameraSelect.value : null);
+
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: TARGET_WIDTH },
-          height: { ideal: TARGET_HEIGHT },
-          facingMode: 'user'
-        },
-        audio: false
-      });
+      // Stage 1: Try high resolution with exact/ideal constraints
+      try {
+        const constraints = {
+          video: targetDeviceId
+            ? { deviceId: { exact: targetDeviceId }, width: { ideal: TARGET_WIDTH }, height: { ideal: TARGET_HEIGHT } }
+            : { width: { ideal: TARGET_WIDTH }, height: { ideal: TARGET_HEIGHT } },
+          audio: false
+        };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (e1) {
+        console.warn('Stage 1 camera constraints failed, attempting fallback stage 2...', e1);
+        // Stage 2: Basic video constraint without fixed resolution or deviceId restriction
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
 
       webcamFeed.srcObject = mediaStream;
 
@@ -88,12 +159,206 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus('live', 'Live Feed');
         freezeBtn.disabled = false;
         updateStepper();
+        populateCameraDevices();
       };
 
     } catch (err) {
       console.error('Error accessing webcam:', err);
       showError(err);
     }
+  }
+
+  // Fallback Mode 1: Screen Share (getDisplayMedia)
+  async function initScreenShare() {
+    stopActiveStream();
+    hideError();
+    updateStatus('connecting', 'Sharing screen...');
+    freezeBtn.disabled = true;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert('Screen sharing is not supported in this browser.');
+      return;
+    }
+
+    try {
+      mediaStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' },
+        audio: false
+      });
+
+      webcamFeed.srcObject = mediaStream;
+
+      webcamFeed.onloadedmetadata = () => {
+        webcamFeed.play().catch(e => console.warn('Autoplay prevented:', e));
+        const width = webcamFeed.videoWidth || TARGET_WIDTH;
+        const height = webcamFeed.videoHeight || TARGET_HEIGHT;
+        actualResText.textContent = `Feed Resolution: ${width} × ${height} px (Screen Share)`;
+
+        freezeCanvas.width = width;
+        freezeCanvas.height = height;
+        offscreenCanvas.width = width;
+        offscreenCanvas.height = height;
+
+        updateStatus('live', 'Screen Share');
+        freezeBtn.disabled = false;
+        updateStepper();
+      };
+
+      // Listen for stream end (user clicks "Stop Sharing")
+      mediaStream.getVideoTracks()[0].onended = () => {
+        updateStatus('connecting', 'Screen share ended');
+        showError({ name: 'Ended', message: 'Screen sharing session was ended.' });
+      };
+
+    } catch (err) {
+      console.warn('Screen share canceled or failed:', err);
+      if (err.name !== 'NotAllowedError') {
+        showError(err);
+      } else {
+        updateStatus('error', 'Canceled');
+      }
+    }
+  }
+
+  // Fallback Mode 2: Simulated Patient Monitor Feed (Canvas Generator)
+  function initSimulatedFeed() {
+    stopActiveStream();
+    hideError();
+    updateStatus('live', 'Demo Monitor');
+    freezeBtn.disabled = false;
+
+    const simCanvas = document.createElement('canvas');
+    simCanvas.width = TARGET_WIDTH;
+    simCanvas.height = TARGET_HEIGHT;
+    const simCtx = simCanvas.getContext('2d');
+
+    let waveOffset = 0;
+
+    function renderSimulatedFrame() {
+      waveOffset += 0.05;
+
+      // Dark medical screen background
+      simCtx.fillStyle = '#090d16';
+      simCtx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+      // Header Bar
+      simCtx.fillStyle = '#1e293b';
+      simCtx.fillRect(0, 0, TARGET_WIDTH, 48);
+      simCtx.fillStyle = '#94a3b8';
+      simCtx.font = '600 16px Inter, sans-serif';
+      simCtx.fillText('PATIENT MONITOR - SIMULATOR FEED (OR-ROOM 3)', 20, 30);
+      simCtx.fillStyle = '#10b981';
+      simCtx.fillText('● MONITORED', TARGET_WIDTH - 160, 30);
+
+      // Grid Lines
+      simCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      simCtx.lineWidth = 1;
+      for (let x = 0; x < TARGET_WIDTH; x += 40) {
+        simCtx.beginPath(); simCtx.moveTo(x, 48); simCtx.lineTo(x, TARGET_HEIGHT); simCtx.stroke();
+      }
+      for (let y = 48; y < TARGET_HEIGHT; y += 40) {
+        simCtx.beginPath(); simCtx.moveTo(0, y); simCtx.lineTo(TARGET_WIDTH, y); simCtx.stroke();
+      }
+
+      // Vital 1: Heart Rate (Green)
+      simCtx.fillStyle = '#10b981';
+      simCtx.font = 'bold 18px Inter, sans-serif';
+      simCtx.fillText('ECG / HR', 30, 90);
+      simCtx.font = 'bold 64px Inter, sans-serif';
+      simCtx.fillText('74', 30, 160);
+      simCtx.font = '14px Inter, sans-serif';
+      simCtx.fillText('bpm', 120, 160);
+
+      // ECG Waveform
+      simCtx.strokeStyle = '#10b981';
+      simCtx.lineWidth = 3;
+      simCtx.beginPath();
+      for (let x = 200; x < TARGET_WIDTH - 30; x += 2) {
+        const t = (x / 50) - waveOffset;
+        let y = 130 + Math.sin(t) * 8;
+        // PQRST Spike simulation
+        const cycle = (x + waveOffset * 60) % 180;
+        if (cycle > 80 && cycle < 90) y -= 45; // R-peak
+        else if (cycle >= 90 && cycle < 100) y += 15; // S-dip
+        if (x === 200) simCtx.moveTo(x, y); else simCtx.lineTo(x, y);
+      }
+      simCtx.stroke();
+
+      // Divider
+      simCtx.strokeStyle = '#334155';
+      simCtx.beginPath(); simCtx.moveTo(20, 200); simCtx.lineTo(TARGET_WIDTH - 20, 200); simCtx.stroke();
+
+      // Vital 2: SpO2 (Cyan)
+      simCtx.fillStyle = '#0284c7';
+      simCtx.font = 'bold 18px Inter, sans-serif';
+      simCtx.fillText('SpO2', 30, 240);
+      simCtx.font = 'bold 64px Inter, sans-serif';
+      simCtx.fillText('98', 30, 310);
+      simCtx.font = '14px Inter, sans-serif';
+      simCtx.fillText('%', 120, 310);
+
+      // Pleth Waveform
+      simCtx.strokeStyle = '#0284c7';
+      simCtx.lineWidth = 3;
+      simCtx.beginPath();
+      for (let x = 200; x < TARGET_WIDTH - 30; x += 3) {
+        const t = (x / 40) - waveOffset;
+        let y = 280 + Math.sin(t) * 18 + Math.cos(t * 2) * 5;
+        if (x === 200) simCtx.moveTo(x, y); else simCtx.lineTo(x, y);
+      }
+      simCtx.stroke();
+
+      // Divider
+      simCtx.beginPath(); simCtx.moveTo(20, 350); simCtx.lineTo(TARGET_WIDTH - 20, 350); simCtx.stroke();
+
+      // Vital 3: NIBP Blood Pressure (Red/Orange)
+      simCtx.fillStyle = '#d97706';
+      simCtx.font = 'bold 18px Inter, sans-serif';
+      simCtx.fillText('NIBP (Sys / Dia)', 30, 390);
+      simCtx.font = 'bold 60px Inter, sans-serif';
+      simCtx.fillText('120/80', 30, 460);
+      simCtx.font = '14px Inter, sans-serif';
+      simCtx.fillText('mmHg  (Mean 93)', 260, 460);
+
+      // Divider
+      simCtx.beginPath(); simCtx.moveTo(20, 500); simCtx.lineTo(TARGET_WIDTH - 20, 500); simCtx.stroke();
+
+      // Vital 4: EtCO2 (Purple)
+      simCtx.fillStyle = '#8b5cf6';
+      simCtx.font = 'bold 18px Inter, sans-serif';
+      simCtx.fillText('EtCO2', 30, 540);
+      simCtx.font = 'bold 64px Inter, sans-serif';
+      simCtx.fillText('36', 30, 610);
+      simCtx.font = '14px Inter, sans-serif';
+      simCtx.fillText('mmHg', 120, 610);
+
+      // Capnography Waveform
+      simCtx.strokeStyle = '#8b5cf6';
+      simCtx.lineWidth = 3;
+      simCtx.beginPath();
+      for (let x = 200; x < TARGET_WIDTH - 30; x += 4) {
+        const cycle = (x + waveOffset * 40) % 200;
+        let y = 600;
+        if (cycle > 40 && cycle < 140) y = 560 + Math.sin(x / 30) * 3;
+        if (x === 200) simCtx.moveTo(x, y); else simCtx.lineTo(x, y);
+      }
+      simCtx.stroke();
+
+      simulatedAnimationId = requestAnimationFrame(renderSimulatedFrame);
+    }
+
+    renderSimulatedFrame();
+
+    const stream = simCanvas.captureStream(30);
+    mediaStream = stream;
+    webcamFeed.srcObject = mediaStream;
+
+    actualResText.textContent = `Feed Resolution: ${TARGET_WIDTH} × ${TARGET_HEIGHT} px (Demo Feed)`;
+    freezeCanvas.width = TARGET_WIDTH;
+    freezeCanvas.height = TARGET_HEIGHT;
+    offscreenCanvas.width = TARGET_WIDTH;
+    offscreenCanvas.height = TARGET_HEIGHT;
+    updateStepper();
   }
 
   // Toggle freeze / unfreeze frame
@@ -512,9 +777,75 @@ document.addEventListener('DOMContentLoaded', () => {
     statusText.textContent = label;
   }
 
+  // Diagnostic Camera Error Handler
   function showError(err) {
     updateStatus('error', 'Camera Offline');
     cameraError.classList.remove('hidden');
+
+    const errName = err && err.name ? err.name : '';
+    const isFile = window.location.protocol === 'file:';
+    const isHttpNonLocal = window.location.protocol === 'http:' && 
+                           window.location.hostname !== 'localhost' && 
+                           window.location.hostname !== '127.0.0.1';
+
+    if (errName === 'InsecureContext' || isFile || isHttpNonLocal) {
+      if (errorIcon) errorIcon.textContent = '🔒⚠️';
+      if (errorTitle) errorTitle.textContent = 'Browser Security Restriction';
+      if (errorMessage) errorMessage.textContent = 'Modern browsers block camera access when opening HTML directly as local files (file://) or over plain HTTP IP addresses.';
+      if (errorDiagnosticHint) {
+        errorDiagnosticHint.classList.remove('hidden');
+        errorDiagnosticHint.innerHTML = `
+          <strong>How to fix:</strong><br>
+          1. Start the FastAPI backend server in terminal:<br>
+          &nbsp;&nbsp;<code>uvicorn backend.main:app --reload</code><br>
+          2. Open <a href="http://localhost:8000/app/index.html" target="_blank" style="color: #38bdf8; text-decoration: underline;">http://localhost:8000/app/index.html</a> in your browser.<br>
+          3. Or click <strong>Screen Share</strong> or <strong>Demo Monitor</strong> below to test immediately!
+        `;
+      }
+    } else if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+      if (errorIcon) errorIcon.textContent = '🚫📷';
+      if (errorTitle) errorTitle.textContent = 'Camera Access Blocked';
+      if (errorMessage) errorMessage.textContent = 'Permission to access your webcam was denied in browser or system privacy settings.';
+      if (errorDiagnosticHint) {
+        errorDiagnosticHint.classList.remove('hidden');
+        errorDiagnosticHint.innerHTML = `
+          <strong>How to fix:</strong><br>
+          1. Click the camera lock icon 🔒 next to the address bar.<br>
+          2. Set Camera access to <strong>Allow</strong> and click <strong>Retry Camera</strong>.<br>
+          3. Check Windows Privacy Settings → <em>Allow apps to access your camera</em>.
+        `;
+      }
+    } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+      if (errorIcon) errorIcon.textContent = '📷❓';
+      if (errorTitle) errorTitle.textContent = 'No Camera Detected';
+      if (errorMessage) errorMessage.textContent = 'No webcam hardware was found connected to your computer.';
+      if (errorDiagnosticHint) {
+        errorDiagnosticHint.classList.remove('hidden');
+        errorDiagnosticHint.innerHTML = `
+          Plug in a USB webcam, or use <strong>Screen Share</strong> / <strong>Demo Monitor</strong> mode below to calibrate without a camera.
+        `;
+      }
+    } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+      if (errorIcon) errorIcon.textContent = '📷🔒';
+      if (errorTitle) errorTitle.textContent = 'Camera Already in Use';
+      if (errorMessage) errorMessage.textContent = 'Your webcam is being used by another application (e.g. Zoom, Teams, Skype, or another browser tab).';
+      if (errorDiagnosticHint) {
+        errorDiagnosticHint.classList.remove('hidden');
+        errorDiagnosticHint.innerHTML = `
+          Close other video apps or browser tabs accessing your camera, then click <strong>Retry Camera</strong>.
+        `;
+      }
+    } else {
+      if (errorIcon) errorIcon.textContent = '📷❌';
+      if (errorTitle) errorTitle.textContent = 'Camera Connection Error';
+      if (errorMessage) errorMessage.textContent = (err && err.message) ? err.message : 'Could not initialize camera stream.';
+      if (errorDiagnosticHint) {
+        errorDiagnosticHint.classList.remove('hidden');
+        errorDiagnosticHint.innerHTML = `
+          Try selecting a different camera device from the dropdown above, or use <strong>Screen Share</strong> / <strong>Demo Monitor</strong>.
+        `;
+      }
+    }
   }
 
   function hideError() {
@@ -569,15 +900,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     isMonitoring = true;
+    if (isFrozen) {
+      unfreezeToLiveFeed();
+    }
     if (startMonitoringBtn) startMonitoringBtn.classList.add('hidden');
     if (stopMonitoringBtn) stopMonitoringBtn.classList.remove('hidden');
-    updateMonitoringStatus('live', 'Monitoring Active (5s)');
+    updateMonitoringStatus('live', 'Monitoring Active (1s)');
 
-    // Run first capture cycle immediately, then every 5 seconds
+    // Run first capture cycle immediately, then every 1 second for instant live updates
     captureAndProcessReadings(calibration);
     monitoringInterval = setInterval(() => {
       captureAndProcessReadings(calibration);
-    }, 5000);
+    }, 1000);
   }
 
   function stopMonitoring() {
@@ -592,14 +926,14 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMonitoringStatus('connecting', 'Monitoring Paused');
   }
 
-  async function captureAndProcessReadings(calibration) {
-    if (!webcamFeed || webcamFeed.paused || webcamFeed.ended || webcamFeed.readyState < 2) {
-      console.warn('Camera feed not ready for monitoring capture');
-      return;
-    }
+  let isProcessingCycle = false;
 
-    const width = webcamFeed.videoWidth || TARGET_WIDTH;
-    const height = webcamFeed.videoHeight || TARGET_HEIGHT;
+  async function captureAndProcessReadings(calibration) {
+    if (isProcessingCycle) return;
+    isProcessingCycle = true;
+    try {
+      const width = (webcamFeed && webcamFeed.videoWidth) ? webcamFeed.videoWidth : (offscreenCanvas.width || calibration.frameWidth || TARGET_WIDTH);
+      const height = (webcamFeed && webcamFeed.videoHeight) ? webcamFeed.videoHeight : (offscreenCanvas.height || calibration.frameHeight || TARGET_HEIGHT);
 
     // Capture full frame to canvas
     const fullCanvas = document.createElement('canvas');
@@ -607,10 +941,25 @@ document.addEventListener('DOMContentLoaded', () => {
     fullCanvas.height = height;
     const fullCtx = fullCanvas.getContext('2d');
 
-    if (isFrozen && offscreenCanvas.width > 0) {
+    let drewFrame = false;
+
+    // Prioritize live webcam/screen/demo video feed whenever active
+    if (webcamFeed && webcamFeed.videoWidth > 0 && !webcamFeed.paused && !webcamFeed.ended) {
+      try {
+        fullCtx.drawImage(webcamFeed, 0, 0, width, height);
+        drewFrame = true;
+      } catch (e) {}
+    }
+
+    // Fall back to offscreen snapshot if live video feed is unavailable
+    if (!drewFrame && offscreenCanvas.width > 0 && offscreenCanvas.height > 0) {
       fullCtx.drawImage(offscreenCanvas, 0, 0, width, height);
-    } else {
-      fullCtx.drawImage(webcamFeed, 0, 0, width, height);
+      drewFrame = true;
+    }
+
+    if (!drewFrame) {
+      console.warn('No active frame available for monitoring capture');
+      return;
     }
 
     const scaleX = width / (calibration.frameWidth || width);
@@ -698,7 +1047,11 @@ document.addEventListener('DOMContentLoaded', () => {
     await Promise.all(tasks);
 
     // Construct exact cycle payload
-    const getVal = (fieldType) => (cycleResults[fieldType]?.status === 'ok' ? cycleResults[fieldType].smoothed_value : null);
+    const getVal = (fieldType) => (
+      cycleResults[fieldType]?.status === 'ok' || cycleResults[fieldType]?.status === 'fallback_estimated'
+        ? cycleResults[fieldType].smoothed_value
+        : null
+    );
 
     const hrVal = getVal('heart_rate');
     const spo2Val = getVal('spo2');
@@ -723,7 +1076,6 @@ document.addEventListener('DOMContentLoaded', () => {
       etco2: etco2Val
     };
 
-    // Send single cycle payload to /process-cycle for rule-based case tracking
     try {
       const cycleResp = await fetch('http://localhost:8000/process-cycle', {
         method: 'POST',
@@ -749,7 +1101,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.error('Failed to post cycle to /process-cycle:', err);
     }
+  } catch (err) {
+    console.error('Error during capture and process cycle:', err);
+  } finally {
+    isProcessingCycle = false;
   }
+}
 
   function updateTopCaseStatus(status, caseId) {
     const caseStatusBar = document.getElementById('caseStatusBar');
@@ -777,6 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const dashboardLink = document.getElementById('dashboardLink');
+    const cardDashboardBtn = document.getElementById('cardDashboardBtn');
 
     if (caseIdBadge && caseIdText) {
       if (caseId) {
@@ -785,8 +1143,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dashboardLink) {
           dashboardLink.href = `dashboard.html?case_id=${encodeURIComponent(caseId)}`;
         }
+        if (cardDashboardBtn) {
+          cardDashboardBtn.href = `dashboard.html?case_id=${encodeURIComponent(caseId)}`;
+          cardDashboardBtn.classList.remove('hidden');
+        }
       } else {
         caseIdBadge.classList.add('hidden');
+        if (cardDashboardBtn) {
+          cardDashboardBtn.classList.add('hidden');
+        }
       }
     }
   }
@@ -811,6 +1176,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (status === 'ok') {
         dotEl.classList.add('dot-green');
         statusEl.textContent = 'ok';
+        if (noteEl) noteEl.classList.add('hidden');
+      } else if (status === 'fallback_estimated') {
+        dotEl.classList.add('dot-purple');
+        statusEl.textContent = 'Demo simulation';
         if (noteEl) noteEl.classList.add('hidden');
       } else if (status === 'bad_frame') {
         dotEl.classList.add('dot-orange');
@@ -854,8 +1223,18 @@ document.addEventListener('DOMContentLoaded', () => {
   freezeBtn.addEventListener('click', toggleFreezeFrame);
   retakeBtn.addEventListener('click', retakeFrame);
   if (retryCameraBtn) {
-    retryCameraBtn.addEventListener('click', initCamera);
+    retryCameraBtn.addEventListener('click', () => initCamera());
   }
+  if (cameraSelect) {
+    cameraSelect.addEventListener('change', (e) => {
+      initCamera(e.target.value);
+    });
+  }
+  if (screenShareBtn) screenShareBtn.addEventListener('click', initScreenShare);
+  if (simulatedFeedBtn) simulatedFeedBtn.addEventListener('click', initSimulatedFeed);
+  if (errorScreenShareBtn) errorScreenShareBtn.addEventListener('click', initScreenShare);
+  if (errorSimulatedBtn) errorSimulatedBtn.addEventListener('click', initSimulatedFeed);
+
   if (startMonitoringBtn) {
     startMonitoringBtn.addEventListener('click', startMonitoring);
   }
@@ -863,7 +1242,8 @@ document.addEventListener('DOMContentLoaded', () => {
     stopMonitoringBtn.addEventListener('click', stopMonitoring);
   }
 
-  // Initialize
+  // Initialize Application
+  populateCameraDevices();
   initCamera();
   checkSavedCalibration();
 });

@@ -123,8 +123,8 @@ def process_cycle(readings_dict: Dict[str, Any]) -> Dict[str, Any]:
 
     active_case_id = get_active_case()
 
-    # Rule Evaluation
-    if active_case_id is None and _good_cycles_count >= 3:
+    # Rule Evaluation: Start case instantly on 1 good cycle for instant demo feedback
+    if active_case_id is None and _good_cycles_count >= 1:
         new_case_id = create_case()
         _good_cycles_count = 0
         _stale_cycles_count = 0

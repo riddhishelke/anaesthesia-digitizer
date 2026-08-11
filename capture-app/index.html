@@ -6,7 +6,7 @@
   <title>Camera Capture & Calibration Tool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -46,21 +46,21 @@
       <!-- Prominent Case Status Banner -->
       <div id="caseStatusBar" class="case-status-bar status-waiting">
         <div class="status-main-info">
-          <span class="status-icon" id="caseStatusIcon">⏳</span>
+          <span class="status-icon" id="caseStatusIcon" aria-hidden="true"></span>
           <span class="status-label" id="caseStatusText">Waiting for stable signal</span>
         </div>
         <div id="caseIdBadge" class="case-id-badge hidden">
           <span class="case-id-label">Active Case:</span>
           <span id="caseIdText" class="case-id-val">--</span>
           <a id="dashboardLink" href="dashboard.html" target="_blank" class="dashboard-btn">
-            View Live Dashboard ↗
+            View Live Dashboard
           </a>
         </div>
       </div>
 
       <!-- Success Message Banner -->
       <div id="saveSuccessBanner" class="save-success-banner hidden">
-        <div class="banner-icon">✓</div>
+        <div class="banner-icon" aria-hidden="true"></div>
         <div class="banner-content">
           <p class="banner-title" id="bannerTitle">Calibration saved!</p>
           <p class="banner-text" id="bannerText">You can now start monitoring.</p>
@@ -76,6 +76,17 @@
             <h2 id="stepTitle">Point your camera at the monitor screen</h2>
           </div>
           <div class="controls-bar">
+            <!-- Camera Device Select Dropdown -->
+            <select id="cameraSelect" class="camera-select-dropdown" title="Select Camera Device">
+              <option value="">Default Camera</option>
+            </select>
+            <!-- Source Selector Quick Action Buttons -->
+            <button id="screenShareBtn" class="btn btn-secondary btn-sm" title="Share Patient Monitor Tab/Window">
+              Screen Share
+            </button>
+            <button id="simulatedFeedBtn" class="btn btn-secondary btn-sm" title="Use Simulated Patient Monitor">
+              Demo Monitor
+            </button>
             <div id="statusBadge" class="status-badge status-connecting">
               <span class="status-dot"></span>
               <span id="statusText">Connecting camera...</span>
@@ -123,15 +134,17 @@
               </div>
             </div>
 
-            <!-- Camera Error Overlay -->
+            <!-- Camera Error & Diagnostic Overlay -->
             <div id="cameraError" class="camera-error-overlay hidden">
               <div class="error-card">
-                <div class="error-icon">📷❌</div>
-                <h3>Camera Access Required</h3>
-                <p>We couldn't access your camera. Please ensure camera permissions are enabled in your browser settings for this page and try again.</p>
+                <div class="error-icon" id="errorIcon" aria-hidden="true"></div>
+                <h3 id="errorTitle">Camera Connection Failed</h3>
+                <p id="errorMessage">We couldn't access your camera. Please ensure camera permissions are enabled in your browser settings and try again.</p>
+                <div id="errorDiagnosticHint" class="error-diagnostic-hint hidden"></div>
                 <div class="error-actions">
-                  <button id="retryCameraBtn" class="btn btn-secondary">Retry Camera Access</button>
-                  <button onclick="location.reload()" class="btn btn-primary">Reload Page</button>
+                  <button id="retryCameraBtn" class="btn btn-primary">Retry Camera</button>
+                  <button id="errorScreenShareBtn" class="btn btn-secondary">Screen Share</button>
+                  <button id="errorSimulatedBtn" class="btn btn-accent">Demo Monitor</button>
                 </div>
               </div>
             </div>
@@ -243,6 +256,9 @@
                 </svg>
                 Stop Monitoring
               </button>
+              <a id="cardDashboardBtn" href="dashboard.html" target="_blank" class="btn btn-primary hidden" style="text-decoration: none;">
+                View Dashboard
+              </a>
               <div id="monitoringStatusBadge" class="status-badge status-connecting">
                 <span class="status-dot"></span>
                 <span id="monitoringStatusText">Idle</span>
@@ -263,7 +279,7 @@
               </div>
               <div class="readout-value-container">
                 <div class="readout-value" id="smoothed-heart_rate">--</div>
-                <span id="note-heart_rate" class="holding-note hidden">⚠ holding last reading</span>
+                <span id="note-heart_rate" class="holding-note hidden">Holding last reading</span>
               </div>
               <div class="readout-sub text-muted">Raw: <span id="raw-heart_rate">--</span></div>
             </div>
@@ -279,7 +295,7 @@
               </div>
               <div class="readout-value-container">
                 <div class="readout-value" id="smoothed-spo2">--</div>
-                <span id="note-spo2" class="holding-note hidden">⚠ holding last reading</span>
+                <span id="note-spo2" class="holding-note hidden">Holding last reading</span>
               </div>
               <div class="readout-sub text-muted">Raw: <span id="raw-spo2">--</span></div>
             </div>
@@ -295,7 +311,7 @@
               </div>
               <div class="readout-value-container">
                 <div class="readout-value" id="smoothed-blood_pressure">--</div>
-                <span id="note-blood_pressure" class="holding-note hidden">⚠ holding last reading</span>
+                <span id="note-blood_pressure" class="holding-note hidden">Holding last reading</span>
               </div>
               <div class="readout-sub text-muted">Raw: <span id="raw-blood_pressure">--</span></div>
             </div>
@@ -311,7 +327,7 @@
               </div>
               <div class="readout-value-container">
                 <div class="readout-value" id="smoothed-etco2">--</div>
-                <span id="note-etco2" class="holding-note hidden">⚠ holding last reading</span>
+                <span id="note-etco2" class="holding-note hidden">Holding last reading</span>
               </div>
               <div class="readout-sub text-muted">Raw: <span id="raw-etco2">--</span></div>
             </div>

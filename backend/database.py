@@ -119,6 +119,17 @@ def get_active_case() -> Optional[str]:
         return row["case_id"] if row else None
 
 
+def get_latest_case() -> Optional[str]:
+    """Returns the most recent case_id created in the database."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT case_id FROM cases ORDER BY started_at DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        return row["case_id"] if row else None
+
+
 def get_case(case_id: str) -> Optional[Dict[str, Any]]:
     """Returns metadata for a specific case_id."""
     with get_db_connection() as conn:
